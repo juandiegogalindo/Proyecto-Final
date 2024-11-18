@@ -1,0 +1,192 @@
+package C3ProyectoFinal;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+
+/**
+ *
+ * @author jdgal
+ */
+
+
+public class GestorLogistico {
+
+    PriorityQueue<Solicitud> colaPrioridad;
+    List<Camion> flotaCamiones;
+    Map<String, Cliente> clientes;
+    private Map<String, Integer> distancias;
+
+    public GestorLogistico() {
+        this.clientes = new HashMap<>();
+        this.colaPrioridad = new PriorityQueue<>(Comparator.comparingInt(Solicitud::getPrioridad).reversed());
+        this.distancias = new HashMap<>();
+        this.flotaCamiones = new ArrayList<>();
+
+        inicializarDistancias();
+        inicializarFlotaCamiones();
+    }
+
+    private void inicializarFlotaCamiones() {
+        for (int i = 0; i < 50; i++) {
+            flotaCamiones.add(new Camion());
+        }
+    }
+
+    private void inicializarDistancias() {
+        // Distancias en kilómetros desde la sede
+        distancias.put("CiudadA", 50);  // 50 km
+        distancias.put("CiudadB", 120); // 120 km
+        distancias.put("CiudadC", 200); // 200 km
+        distancias.put("CiudadD", 300); // 300 km
+    }
+
+    public Cliente buscarCliente(String id) {
+        return clientes.get(id);
+    }
+
+    public void registrarCliente(String nombre, String id) {
+        if (!clientes.containsKey(id)) {
+            clientes.put(id, new Cliente(nombre, id));
+            System.out.println("Cliente registrado exitosamente.");
+        } else {
+            System.out.println("El cliente ya está registrado.");
+        }
+    }
+
+    public void agregarSolicitud(Mercancia mercancia) {
+        int prioridad = calcularPrioridad(mercancia);
+        Solicitud nuevaSolicitud = new Solicitud(mercancia, prioridad);
+        colaPrioridad.add(nuevaSolicitud);
+        System.out.println("Solicitud registrada con éxito. Prioridad: " + prioridad);
+    }
+
+    private Map<String, Integer> calcularSolicitudesPorCiudad() {
+        Map<String, Integer> conteoPorCiudad = new HashMap<>();
+        for (Solicitud solicitud : colaPrioridad) {
+            String ciudad = solicitud.mercancia.ciudadDestino;
+            conteoPorCiudad.put(ciudad, conteoPorCiudad.getOrDefault(ciudad, 0) + 1);
+        }
+        return conteoPorCiudad;
+    }
+
+  private int calcularPrioridad(Mercancia mercancia) {
+    int distancia = distancias.getOrDefault(mercancia.ciudadDestino, Integer.MAX_VALUE);
+    
+    // Fórmula: mayor peso y menor volumen = más prioridad. Menor distancia = más prioridad.
+    // Calcula la prioridad teniendo en cuenta peso, volumen y distancia
+    int prioridad = (int) ((mercancia.peso / mercancia.volumen) * 10) - (distancia / 10);
+    
+    // Aseguramos que la prioridad no sea negativa
+    return Math.max(prioridad, 1);
+}
+
+
+
+
+    public void asignarCamion() {
+        if (colaPrioridad.isEmpty()) {
+            System.out.println("No hay solicitudes pendientes.");
+            return;
+        }
+
+        // Agrupar solicitudes por ciudad
+        Map<String, List<Solicitud>> agrupadasPorCiudad = new HashMap<>();
+        for (Solicitud solicitud : colaPrioridad) {
+            agrupadasPorCiudad
+                    .computeIfAbsent(solicitud.mercancia.ciudadDestino, k -> new ArrayList<>())
+                    .add(solicitud);
+        }
+
+        // Ordenar las ciudades por número de solicitudes (de mayor a menor)
+        List<Map.Entry<String, List<Solicitud>>> ciudadesOrdenadas = new ArrayList<>(agrupadasPorCiudad.entrySet());
+        ciudadesOrdenadas.sort((entry1, entry2) -> Integer.compare(entry2.getValue().size(), entry1.getValue().size()));
+
+        // Asignar camiones por prioridad de ciudades
+        for (Map.Entry<String, List<Solicitud>> entry : ciudadesOrdenadas) {
+            String ciudad = entry.getKey();
+            List<Solicitud> solicitudes = entry.getValue();
+
+            boolean camionAsignado = false;
+
+            for (Solicitud solicitud : solicitudes) {
+                // Verificar si la solicitud es tardía
+                if (solicitud.esEntregaTardia()) {
+                    solicitud.cobrada = false; // Marcar como no cobrada
+                    System.out.println("Solicitud para " + solicitud.mercancia.descripcion
+                            + " en la ciudad " + ciudad + " no será cobrada por exceder 3 días hábiles.");
+                    continue; // Saltar las solicitudes tardías
+                }
+
+                // Asignar un camión disponible
+                for (Camion camion : flotaCamiones) {
+                    if (!camion.ocupado) {
+                        camion.ocupado = true;
+                        System.out.println("Camion asignado para la ciudad " + ciudad
+                                + " con entrega de " + solicitud.mercancia.descripcion + ".");
+                        camionAsignado = true;
+                        break; // Salir del bucle si se asignó un camión
+                    }
+                }
+                if (camionAsignado) {
+                    break; // Salir del bucle si un camión fue asignado
+                }
+            }
+
+            if (!camionAsignado) {
+                System.out.println("No hay camiones disponibles para la ciudad " + ciudad + ".");
+            }
+        }
+    }
+
+    public void mostrarSolicitudesNoCobradas() {
+        System.out.println("\nSolicitudes que no serán cobradas:");
+        for (Solicitud solicitud : colaPrioridad) {
+            if (!solicitud.cobrada) { // Comprobamos si la solicitud no fue cobrada
+                System.out.println("Mercancía: " + solicitud.mercancia.descripcion
+                        + ", Ciudad: " + solicitud.mercancia.ciudadDestino
+                        + ", Fecha de Creación: " + solicitud.fechaCreacion);
+            }
+        }
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        // Crear el gestor logístico
+        GestorLogistico gestor = new GestorLogistico();
+
+        // Registrar clientes
+        gestor.registrarCliente("Juan Pérez", "123");
+        gestor.registrarCliente("Ana García", "456");
+
+        // Crear mercancias
+        Mercancia mercancia1 = new Mercancia("Juguetes", "CiudadA", 10, 5); // Mercancía que será cobrada
+        Mercancia mercancia2 = new Mercancia("Electrónica", "CiudadB", 20, 8); // Mercancía que será cobrada
+        Mercancia mercancia3 = new Mercancia("Muebles", "CiudadC", 15, 10); // Mercancía que no será cobrada (más de 3 días)
+
+        // Agregar solicitudes
+        gestor.agregarSolicitud(mercancia1);
+        gestor.agregarSolicitud(mercancia2);
+        gestor.agregarSolicitud(mercancia3);
+
+        // Simulamos un retraso en la entrega para la solicitud 3
+        // Hacemos que la fecha de creación de la mercancia 3 sea hace 4 días.
+        gestor.colaPrioridad.stream()
+                .filter(s -> s.mercancia.descripcion.equals("Muebles"))
+                .forEach(s -> s.fechaCreacion = s.fechaCreacion.minusDays(4));
+
+        // Verificar las solicitudes no cobradas antes de asignar camiones
+        gestor.mostrarSolicitudesNoCobradas();
+
+        // Asignar camiones
+        gestor.asignarCamion();
+
+        // Mostrar las solicitudes no cobradas después de asignar camiones
+        gestor.mostrarSolicitudesNoCobradas();
+    }
+}
+
